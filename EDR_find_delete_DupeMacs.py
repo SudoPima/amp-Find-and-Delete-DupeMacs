@@ -5,8 +5,7 @@ import csv
 import requests
 import datetime
 
-
-
+datetime_object = datetime.date.today()
 
 def process_response_json(response_json, parsing_container):
     '''Process the decoded JSON blob from /v1/computers API Endpoint
@@ -146,8 +145,9 @@ def delete_dupe_guids(session, computers_url, guid_list):
     """
     #test = True
 
+    csv_file = 'target_guids_{}.csv'.format(datetime_object)
     # running log during deletion of computer objects
-    with open('target_guids.csv', 'w', newline = '') as csvFile:
+    with open(csv_file, 'w', newline = '') as csvFile:
         fieldnames = ['GUID','STATUS']
         writer = csv.DictWriter(csvFile, fieldnames = fieldnames)
 
@@ -180,10 +180,10 @@ def write_to_csv(type, duplicate_container):
     match type:
         case 1:
             # PRE - deletion
-            csv_file = 'duplicate_computers.csv'
+            csv_file = 'duplicate_computers_{}.csv'.format(datetime_object)
         case 2:
             # POST - deletion
-            csv_file = 'post_del_report.csv'
+            csv_file = 'post_del_report_{}.csv'.format(datetime_object)
         case _:
             return 'Invalid type'
     
