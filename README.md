@@ -12,5 +12,5 @@
     
 ## Upcoming changes
     1. Clean up the UI side
-    2. Export details before/after delete command execution
+    2. ~~Export details before/after delete command execution~~
     3. Cleanup existing functionality, etc.
