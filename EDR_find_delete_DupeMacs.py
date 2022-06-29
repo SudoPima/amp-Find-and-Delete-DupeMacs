@@ -37,6 +37,41 @@ def process_response_json(response_json, parsing_container):
         if 'network_addresses' in guid_entry:
             process_guid_json(guid_entry)
 
+def authenticate_and_process_requests():
+    """
+    """
+    client_id = input("Enter the Client ID: ")
+    api_key = input("Enter the API Key: ")
+
+    parsed_computers = {}
+
+    # Instantiate requestions session object
+    amp_session = requests.session()
+    amp_session.auth = (client_id, api_key)
+
+    # URL to query AMP
+    computers_url = 'https://api.amp.cisco.com/v1/computers'
+
+    # Query the API
+    response_json = get(amp_session, computers_url)
+
+    # Print the total number of GUIDs found
+    total_guids = response_json['metadata']['results']['total']
+    print('GUIDs found in environment: {}'.format(total_guids))
+
+    # Process the returned JSON
+    process_response_json(response_json, parsed_computers)
+
+    # Check if there are more pages and repeat
+    while 'next' in response_json['metadata']['links']:
+        next_url = response_json['metadata']['links']['next']
+        response_json = get(amp_session, next_url)
+        index = response_json['metadata']['results']['index']
+        print('Processing index: {}'.format(index))
+        process_response_json(response_json, parsed_computers)
+
+    return parsed_computers
+
 def analyze_parsed_computers(parsed_data, duplicate_container):
     ''' Analyzes the parsed_computers container and looks at how many times each MAC Address
         appears for a given hostname. If the same MAC appears more than once the host is
@@ -51,7 +86,7 @@ def analyze_parsed_computers(parsed_data, duplicate_container):
                     last_seen = parsed_data[hostname]['guid_last_seen'][guid]
                     duplicate_container.add(host_tuple(hostname, guid, last_seen))
 
-def format_duplicate_output(duplicate_container):
+def format_duplicate_container(duplicate_container):
     ''' Processes the duplicate_computers container and formats the output based on hostname
         Returns a dictionary that can be saved to disk as JSON
     '''
@@ -71,7 +106,6 @@ def print_duplicate_output(formatted_duplicate_container):
     print('Hosts with duplicate GUIDs found: {}'.format(len(formatted_duplicate_container)))
     for host, dupes in formatted_duplicate_container.items():
         print('\n{} has {} duplicates'.format(host, len(dupes)))
-        print('{:>20}{:>36}'.format('GUID', 'LAST SEEN'))
         for last_seen, guid  in dupes.items():
             print('  {} - {}'.format(last_seen, guid))
 
@@ -81,6 +115,7 @@ def write_duplicate_json(formatted_duplicate_container):
     with open('duplicate_hosts.json', 'w') as file:
         file.write(json.dumps(formatted_duplicate_container))
 
+"""
 def write_parsed_computers(parsed_data):
     ''' Converts the Set of unique MAC Addresses in the parsed_computers container
         Without this conversion it can not be written to disk as JSON
@@ -92,9 +127,10 @@ def write_parsed_computers(parsed_data):
 
     with open('parsed_computers.json', 'w') as file:
         file.write(json.dumps(parsed_data))
+"""
 
 def extract_target_guids(hosts):
-    """ Iterate throught the hosts and target the duplicates that have the 
+    """ Iterate through the hosts and target the duplicates that have the 
         oldest last_seen times.
     """
     # for storing the guids of the oldest duplicates
@@ -140,55 +176,28 @@ def get(session, url):
 def main():
     '''The main logic of the script
     '''
-    client_id = input("Enter the Client ID: ")
-    api_key = input("Enter the API Key: ")
-
-    # Instantiate requestions session object
-    amp_session = requests.session()
-    amp_session.auth = (client_id, api_key)
 
     # Containers for data
     parsed_computers = {}
     duplicate_computers = set()
     target_guids = []
 
-    # URL to query AMP
-    computers_url = 'https://api.amp.cisco.com/v1/computers'
-
-    # Query the API
-    response_json = get(amp_session, computers_url)
-
-    # Print the total number of GUIDs found
-    total_guids = response_json['metadata']['results']['total']
-    print('GUIDs found in environment: {}'.format(total_guids))
-
-    # Process the returned JSON
-    process_response_json(response_json, parsed_computers)
-
-    # Check if there are more pages and repeat
-    while 'next' in response_json['metadata']['links']:
-        next_url = response_json['metadata']['links']['next']
-        response_json = get(amp_session, next_url)
-        index = response_json['metadata']['results']['index']
-        print('Processing index: {}'.format(index))
-        process_response_json(response_json, parsed_computers)
-    
     # iterate through parsed computers and find duplicate macs
+    parsed_computers = authenticate_and_process_requests()
     analyze_parsed_computers(parsed_computers, duplicate_computers)
 
     # Clean up the duplicate objects
-    hosts = format_duplicate_output(duplicate_computers)
+    hosts = format_duplicate_container(duplicate_computers)
     # display all hosts that have duplicates in the environment
     # display hosts: last_seen time stamp and Connector_GUID
     print_duplicate_output(hosts)
     
     # iterate through the cleaned up objects and extract the oldest objects connector guids for deletion
     target_guids = extract_target_guids(hosts)
-    
+    for i in target_guids:
+        print(i)
     # Iterates through the guid list and deletes the computers
     #delete_dupe_guids(amp_session, computers_url, target_guids)
-        
-
 
 
 if __name__ == "__main__":
