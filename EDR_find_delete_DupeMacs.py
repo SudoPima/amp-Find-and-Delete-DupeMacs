@@ -107,15 +107,6 @@ def format_duplicate_container(duplicate_container):
         hosts[hostname][last_seen] = guid
     return hosts
 
-def print_duplicate_output(formatted_duplicate_container):
-    '''Process formatted_duplicate_computers and print duplicate stats by host name
-    '''
-    print('Hosts with duplicate GUIDs found: {}'.format(len(formatted_duplicate_container)))
-    for host, dupes in formatted_duplicate_container.items():
-        print('\n{} has {} duplicates'.format(host, len(dupes)))
-        for last_seen, guid  in dupes.items():
-            print('  {} - {}'.format(last_seen, guid))
-
 def extract_target_guids(hosts):
     """ Iterate through the hosts and target the duplicates that have the 
         oldest last_seen times.
@@ -144,6 +135,7 @@ def delete_dupe_guids(session, computers_url, guid_list):
         delte them by connector_guid
     """
     #test = True
+    successful = []
 
     csv_file = 'target_guids_{}.csv'.format(datetime_object)
     # running log during deletion of computer objects
@@ -165,28 +157,20 @@ def delete_dupe_guids(session, computers_url, guid_list):
             if response.status_code == 200 and response_json['data']['deleted']:
                 status = 'Successfully deleted: {}'.format(guid)
                 writer.writerow({'GUID': guid, 'STATUS': status})
+                successful.append(guid)
             # if response unsuccessful: write status & GUID to csv
             else:
                 status = 'Something went wrong deleting: {}'.format(guid)
                 writer.writerow({'GUID': guid, 'STATUS': status})
+    
+    return successful
 
-
-def write_to_csv(type, duplicate_container):
+def write_init_data_to_csv(duplicate_container):
     """Writes data to a csv depending on what type of report is specified
     """
-    csv_file = ''
-
     # log to update will either be pre or post guid deletion
-    match type:
-        case 1:
-            # PRE - deletion
-            csv_file = 'duplicate_computers_{}.csv'.format(datetime_object)
-        case 2:
-            # POST - deletion
-            csv_file = 'post_del_report_{}.csv'.format(datetime_object)
-        case _:
-            return 'Invalid type'
-    
+    csv_file = 'duplicate_computers_{}.csv'.format(datetime_object)
+
     # open file and set header
     with open(csv_file, 'w', newline = '') as csvFile:
         fieldnames = ['HOSTNAME','LAST_SEEN','GUID']
@@ -197,6 +181,20 @@ def write_to_csv(type, duplicate_container):
         for host_tuple in sorted(duplicate_container):
             writer.writerow({'HOSTNAME': host_tuple.hostname, 'LAST_SEEN': host_tuple.last_seen, 'GUID': host_tuple.guid})
 
+def write_post_data_to_csv(duplicate_container, deleted_guids):
+    csv_file = 'post_del_report_{}.csv'.format(datetime_object)
+
+    with open(csv_file, 'w', newline = '') as csvFile:
+        fieldnames = ['HOSTNAME','LAST_SEEN','GUID', 'REMOVED']
+        writer = csv.DictWriter(csvFile, fieldnames = fieldnames)
+
+        writer.writeheader()
+    
+        for host_tuple in sorted(duplicate_container):
+            if host_tuple.guid in deleted_guids:
+                writer.writerow({'HOSTNAME': host_tuple.hostname, 'LAST_SEEN': host_tuple.last_seen, 'GUID': host_tuple.guid, 'REMOVED': 'YES'})
+            else:
+                writer.writerow({'HOSTNAME': host_tuple.hostname, 'LAST_SEEN': host_tuple.last_seen, 'GUID': host_tuple.guid, 'REMOVED': ' '})
 
 def get(session, url):
     '''HTTP GET the URL and return the decoded JSON
@@ -246,16 +244,16 @@ def main():
     # Clean up the duplicate objects
     hosts = format_duplicate_container(duplicate_computers)
     # write duplicate computer data to csv type 1: PRE - deletion
-    write_to_csv(1, duplicate_computers)
+    write_init_data_to_csv(duplicate_computers)
     
+    deleted_guids = []
     # iterate through the cleaned up objects and extract the oldest objects connector guids 
     target_guids = extract_target_guids(hosts)
     # Iterates through the guid list and deletes the computers & logs the guid + status
-    #delete_dupe_guids(amp_session, computers_url, target_guids)
+    deleted_guids = delete_dupe_guids(amp_session, computers_url, target_guids)
 
-    # make request for duplicate computer information after deletion
-    writeCSV_post_deletion_data(client_id, api_key) 
-
+    # update the data sheet to reflect deletions
+    write_post_data_to_csv(duplicate_computers, deleted_guids)
 
 if __name__ == "__main__":
     main()
