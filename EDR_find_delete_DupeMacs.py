@@ -35,48 +35,6 @@ def process_response_json(response_json, parsing_container):
     for guid_entry in response_json['data']:
         if 'network_addresses' in guid_entry:
             process_guid_json(guid_entry)
-
-def writeCSV_post_deletion_data(client_id, api_key):
-    """ After deleting the duplicate objects this function can request the duplicate information again
-        to validate that the objects were deleted. The information is then logged to a csv.
-    """
-
-    client_id = client_id
-    api_key = api_key
-
-    parsed_computers = {}
-    duplicate_computers = set()
-
-    # Instantiate requestions session object
-    amp_session = requests.session()
-    amp_session.auth = (client_id, api_key)
-
-    # URL to query AMP
-    computers_url = 'https://api.amp.cisco.com/v1/computers'
-
-    # Query the API
-    response_json = get(amp_session, computers_url)
-
-    # Print the total number of GUIDs found
-    total_guids = response_json['metadata']['results']['total']
-    print('GUIDs found in environment: {}'.format(total_guids))
-
-    # Process the returned JSON
-    process_response_json(response_json, parsed_computers)
-
-    # Check if there are more pages and repeat
-    while 'next' in response_json['metadata']['links']:
-        next_url = response_json['metadata']['links']['next']
-        response_json = get(amp_session, next_url)
-        index = response_json['metadata']['results']['index']
-        print('Processing index: {}'.format(index))
-        process_response_json(response_json, parsed_computers)
-
-    analyze_parsed_computers(parsed_computers, duplicate_computers)
-    hosts = format_duplicate_container(duplicate_computers)
-
-    # POST - deletion csv data
-    write_to_csv(2, duplicate_computers)
     
 
 def analyze_parsed_computers(parsed_data, duplicate_container):
